@@ -1,0 +1,33 @@
+[
+    {
+        "id": "258ef10a974e8897",
+        "type": "function",
+        "z": "91a696825a881462",
+        "name": "AIs2COT 4 yelow node ais modif",
+        "func": "/*\nThis function works with AIS parser NODE-RED https://github.com/chrisadie/node-red-contrib-ais-decoder\nNode of AIS parser is Yellow one on paleete:)\nTODO:\ncheck number 5 msg for NAME of vessel else use MMSI [done]\nmySQL linkage\n\n2 outputs: one with CoT and one with full msg object from AIS for Dbase\n\n*/\n// Initialize the name of vessel stored in the context\ncontext.name = context.name || {};\n\n// Ensure xmlbuilder is available if not check settings.js !!! XMLBUILDER is a node.js not N-red\nvar xmlbuilder = global.get('xmlbuilder');\nif (!xmlbuilder) {\n    node.error(\"xmlbuilder module not found in the context\");\n    return;\n}\n\n// Check if the incoming AIS message is valid\nfunction isValidAIS(aivdm) {\n    \n    return aivdm &&\n        aivdm.senderMmsi &&\n        aivdm.latitude !== null &&\n        aivdm.longitude !== null;\n}\n//function trnslating the AIS object to CoT\nfunction ais2cot(aivdm) {\n    let vesselName = context.name[aivdm.senderMmsi] || aivdm.senderMmsi; //if yes then NAME if not then MMS\n    let timestamp = new Date().toISOString();\n    \n    var cotMessage = xmlbuilder.create({\n        event: {\n            '@version': '2.0',\n            '@uid': aivdm.senderMmsi,\n            '@type': 'a-f-S-X-M-C',  //this is merchant vessel - change accordingly \n            '@time': timestamp,\n            '@start': timestamp,\n            '@stale': new Date(Date.now() + 360000).toISOString(), //stale 6 mins\n            '@how': 'm-g',\n            '@access': 'undefined',\n            point: {\n                '@lat': aivdm.latitude,\n                '@lon': aivdm.longitude,\n                '@hae': '7.10000000',\n                '@ce': '9999999',\n                '@le': '9999999'\n            },\n            detail: {\n                takv: {\n                    '@os': '33',\n                    '@device': aivdm.messageType_text,\n                    '@platform': aivdm.talkerId_text,\n                    '@version': '2.0'\n                },\n                uid: {\n                    '@Droid': aivdm.senderMmsi\n                },\n                precisionlocation: {\n                    '@altsrc': 'gnss'\n                },\n                contact: {\n                    '@endpoint': '*:-1:stcp',\n                    '@callsign': vesselName  //NAME takien fromm no5 msg\n                },\n                __group: {\n                    '@name': 'Cyan',\n                    '@role': 'Team Member'\n                },\n                track: {\n                    '@speed': aivdm.speedOverGround,\n                    '@course': aivdm.courseOverGround\n                }\n            }\n        }\n    }).end({ pretty: true });\n    return cotMessage;\n}\n\n// Checking the validity of the AIS message\nif (isValidAIS(msg.payload)) {\n    // If the AIS message is of type 5, store the vessel name!!! in context\n    if (msg.payload.messageType === 5 && msg.payload.name) {\n        context.name[msg.payload.senderMmsi] = msg.payload.name;  // its the proper name outputed from no 5 msg\n    }\n    const originalWithVesselName = Object.assign({}, msg.payload);\n    if (context.name[msg.payload.senderMmsi]) {\n        originalWithVesselName.vesselName = context.name[msg.payload.senderMmsi];\n    }\n\n    // Create the CoT message\n    const cotMessage = ais2cot(msg.payload);\n\n    // outputs\n    return [\n        {payload: cotMessage },\n        {payload: originalWithVesselName }\n    ];\n\n} else {\n    //node.warn(\"Invalid AIS message received. Skipping.\");  //if uncomented will generate when error\n    return null;  // Skip the message - no payload\n}\n\n",
+        "outputs": 2,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1200,
+        "y": 840,
+        "wires": [
+            [
+                "56b514c271d5f837",
+                "4aa447d1002b60c1"
+            ],
+            [
+                "614b8494cb2e125a"
+            ]
+        ],
+        "inputLabels": [
+            "AIS object"
+        ],
+        "outputLabels": [
+            "AIS as CoT",
+            "AIS as Object COMPLETE"
+        ],
+        "icon": "node-red-contrib-tak-registration/tak.png"
+    }
+]
